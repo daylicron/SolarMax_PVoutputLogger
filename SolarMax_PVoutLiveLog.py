@@ -52,11 +52,16 @@ for host in inverters.keys():
 
 # cycle through the known inverters
 count = 0
+power_exp = [0] * (len(allinverters) + 1)
+temp = [0] * (len(allinverters) + 1)
+vdc = [0] * (len(allinverters) +1)
+energy_exp = [0] * (len(allinverters) +1)
+
 for sm in smlist:
     for (no, ivdata) in sm.inverters().iteritems():
         try:
             # Pass the parameters you wish to get from the inverter and log. Power, Voltage and Temp are all that's required for PVoutput.
-            (inverter, current) = sm.query(no, ['PAC', 'UL1', 'TKK'])
+            (inverter, current) = sm.query(no, ['PAC', 'UL1', 'TKK', 'KDY'])
 
             # create connection to pvoutput.org
             pvoutz = PVoutput_Connection(pvo_key, pvo_systemid)
@@ -68,18 +73,39 @@ for sm in smlist:
             PowerGeneration = str(current['PAC'])
             Temperature = str(current['TKK'])
             Voltage = str(current['UL1'])
+            EnergyGeneration = str(current['KDY']*1000)
 
             print "Date: " + str(powerdate) + " Time: " + str(
-                powerTime) + " W: " + PowerGeneration + " temp: " + Temperature + " volt: " + Voltage
+                powerTime) + " W: " + PowerGeneration + " Temp: " + Temperature + " Volt: " + Voltage + " Energy: " + EnergyGeneration
 
             # update pvoutput
             if (PowerGeneration):  # make sure that we have actual values...
-                pvoutz.add_status(powerdate, powerTime, power_exp=PowerGeneration, temp=Temperature, vdc=Voltage)
-                print "Sucessful Log "
+                i = inverter
+                while inverter == i:
+                    power_exp[i] = float(PowerGeneration)
+                    temp[i] = float(Temperature)
+                    vdc[i] = float(Voltage)
+                    energy_exp[i] = float(EnergyGeneration)
+                    i = 0
+                                
+                print "Inverter " + str(inverter) + " successful Log"
+
+                if (inverter == len(allinverters)):
+                    print "All inverters queried"
+                    print "Merging inverters data..."
+                    power_exp[0] = sum(power_exp[1:])
+                    temp[0] = (sum(temp[1:]) / len(allinverters))
+                    vdc[0] = (sum(vdc[1:]) / len(allinverters))
+                    energy_exp[0] = sum(energy_exp[1:])
+                    print "Inverters data merged!"
+                    print "Date: " + str(powerdate) + " Time: " + str(
+                        powerTime) + " W: " + str(power_exp[0]) + " temp: " + str(temp[0]) + " volt: " + str(vdc[0]) + " energy: " + str(energy_exp[0])
+                    pvoutz.add_status(powerdate, powerTime, energy_exp = energy_exp[0], power_exp = power_exp[0], temp=temp[0], vdc=vdc[0])
+                    print "Inverters data successful log"
                 #Ensure API limits adhered to
                 time.sleep(apiDelay)
             else:
-                print "aint no data bitch.. make the sun come up"
+                print "No data, wait for sunshine"
 
             count += 1
         except:
@@ -99,4 +125,3 @@ if count < len(allinverters):
 
 print "Data Succesfully query and posted."
 time.sleep(1)
-
