@@ -52,6 +52,10 @@ for host in inverters.keys():
 
 # cycle through the known inverters
 count = 0
+power_exp = [0] * (len(allinverters) + 1)
+temp = [0] * (len(allinverters) + 1)
+vdc = [0] * (len(allinverters) +1)
+
 for sm in smlist:
     for (no, ivdata) in sm.inverters().iteritems():
         try:
@@ -74,12 +78,30 @@ for sm in smlist:
 
             # update pvoutput
             if (PowerGeneration):  # make sure that we have actual values...
-                pvoutz.add_status(powerdate, powerTime, power_exp=PowerGeneration, temp=Temperature, vdc=Voltage)
-                print "Sucessful Log "
+                i = inverter
+                while inverter == i:
+                    power_exp[i] = float(PowerGeneration)
+                    temp[i] = float(Temperature)
+                    vdc[i] = float(Voltage)
+                    i = 0
+                                
+                print "Inverter " + str(inverter) + " successful Log"
+
+                if (inverter == len(allinverters)):
+                    print "All inverters queried"
+                    print "Merging inverters data..."
+                    power_exp[0] = sum(power_exp[1:])
+                    temp[0] = (sum(temp[1:]) / len(allinverters))
+                    vdc[0] = (sum(vdc[1:]) / len(allinverters))
+                    print "Inverters data merged!"
+                    print "Date: " + str(powerdate) + " Time: " + str(
+                        powerTime) + " W: " + str(power_exp[0]) + " temp: " + str(temp[0]) + " volt: " + str(vdc[0])
+                    pvoutz.add_status(powerdate, powerTime, power_exp = power_exp[0], temp=temp[0], vdc=vdc[0])
+                    print "Inverters data successful log"
                 #Ensure API limits adhered to
                 time.sleep(apiDelay)
             else:
-                print "aint no data bitch.. make the sun come up"
+                print "No data, wait for sunshine"
 
             count += 1
         except:
@@ -99,4 +121,3 @@ if count < len(allinverters):
 
 print "Data Succesfully query and posted."
 time.sleep(1)
-
