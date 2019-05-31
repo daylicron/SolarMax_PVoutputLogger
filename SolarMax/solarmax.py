@@ -25,6 +25,9 @@ import datetime
 inverter_types = {
       20010: { 'desc': 'SolarMax 2000S', 'max': 2000, },
       20020: { 'desc': 'SolarMax 3000S', 'max': 3000, },
+      # 4200 and similar models have no ethernet port.
+      # You can use netcat to a locally running serial => TCP service, e.g.:
+      # nc -lk localhost 12345 >/dev/ttyUSB0 </dev/ttyUSB0
       4200: { 'desc': 'SolarMax 4200', 'max': 4200, },
       20030: { 'desc': 'SolarMax 4200S', 'max': 4200, },
       20040: { 'desc': 'SolarMax 6000S', 'max': 6000, },
