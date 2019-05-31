@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # -* coding: utf-8 *-
 
 # This program is free software: you can redistribute it and/or modify
@@ -25,6 +25,7 @@ import datetime
 inverter_types = {
       20010: { 'desc': 'SolarMax 2000S', 'max': 2000, },
       20020: { 'desc': 'SolarMax 3000S', 'max': 3000, },
+      4200: { 'desc': 'SolarMax 4200', 'max': 4200, },
       20030: { 'desc': 'SolarMax 4200S', 'max': 4200, },
       20040: { 'desc': 'SolarMax 6000S', 'max': 6000, },
     }
@@ -34,7 +35,7 @@ query_types = ['KDY', 'KYR', 'KMT', 'KT0', 'IL1', 'IDC', 'PAC', 'PRL',
                'SYS', 'SAL', 'TNF', 'PAC', 'PRL', 'TKK', 'UL1', 'UDC',
                'ADR', 'TYP', 'PIN', 'MAC', 'CAC', 'KHR', 'EC00', 'EC01',
                'EC02', 'EC03', 'EC04', 'EC05', 'EC06', 'EC07', 'EC08',
-               'BDN', 'SWV', 'DIN', 'LAN', 'SDAT', 'FDAT']
+               'BDN', 'SWV', 'DIN', 'LAN', 'SDAT', 'FDAT', 'PAM', 'ILM']
 
 
 status_codes = {
@@ -125,7 +126,7 @@ class SolarMax ( object ):
     DEBUG('establishing connection to %s:%i...' % (self.__host, self.__port))
 	
     try:
-    # Python 2.6
+    # Python 3
     # Socket-timeout: 5 secs
       self.__socket = socket.create_connection((self.__host, self.__port), 5)
       self.__connected = True
@@ -156,7 +157,7 @@ class SolarMax ( object ):
       data = ''
       tmp = ''
       while True:
-         tmp = self.__socket.recv(1)
+         tmp = self.__socket.recv(1).decode("utf-8")
          data += tmp
          if len(tmp) < 1 or tmp == '}':
            break
@@ -198,10 +199,14 @@ class SolarMax ( object ):
     data = {}
     
     for item in content.split(';'):
-      (key, value) = item.split('=')
-      if key not in query_types:
-        raise NotImplementedError("Don't know %s" % item)
-      data[key] = value
+      ret = item.split('=')
+      if len(ret) == 1:
+        data["device_response"] = item
+      else:
+        (key, value) = item.split('=')
+        if key not in query_types:
+          raise NotImplementedError("Don't know %s" % item)
+        data[key] = value
     return (inverter, data)
 
 
@@ -214,7 +219,7 @@ class SolarMax ( object ):
         if v not in query_types:
           raise ValueError('Unknown data type »'+v+'«')
       values = ';'.join(values)
-    elif type(values) in [str, unicode]:
+    elif type(values) is str:
       pass
     else:
       raise ValueError('value has unsupported type')
@@ -230,7 +235,7 @@ class SolarMax ( object ):
   def __send_query(self, querystring):
     try:
       DEBUG(self.__host, '=>', querystring)
-      self.__socket.send(querystring)
+      self.__socket.send(querystring.encode("utf-8"))
     except socket.timeout:
       self.__allinverters = False
     except socket.error:
@@ -279,13 +284,15 @@ class SolarMax ( object ):
       (date, time) = value.split(',',2)
       time = int(time, 16)
       return datetime.datetime(int(date[:3], 16), int(date[3:5], 16), int(date[5:], 16), time/3600, (time % 3600) / 60, time % (3600*60))
+    elif key is "device_response":
+      return value
     else:
       return int(value, 16)
 
 
   def write_setting(self, inverter, data):
     rawdata = []
-    for key,value in data.iteritems():
+    for key,value in data.items():
       key = key.upper()
       if key not in query_types:
         raise ValueError('unknown type')
@@ -301,7 +308,7 @@ class SolarMax ( object ):
     result = result[1]
     errors = []
     if result['SAL'] > 0:
-      for (code, descr) in alarm_codes.iteritems():
+      for (code, descr) in alarm_codes.items():
         if code & result['SAL']:
           errors.append(descr)
 
