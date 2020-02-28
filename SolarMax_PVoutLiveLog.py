@@ -22,24 +22,19 @@
 import time
 import sys
 from SolarMax.solarmax import SolarMax  # API for talking to the SolarMax inverter
-from PVoutput.pvoutput import PVoutput_Connection  # API for talking to the PVoutput inverter
+import MySQLdb
 
 
 # Array of inverters in system. IP address and device number
 # factory default is likely 192.168.1.123:12345 1
-inverters = {'192.168.1.123': [1, ]}
+inverters = {'INVETER-IP': [1,2,3 ]}
+
+# Set Language for Status Output
+lang = "de"
 
 # get pvoutput API details
 apiDelay = 5  # time to delay after API calls
 # API Key and SystemId must be entered as arguments for script.
-
-if len(sys.argv) != 3:
-    print "2 arguments required. API key and SystemId. See Documentation for details"
-    print "example: $python SolarMax_PVoutLiveLog.py <API Key> <System Id> "
-    exit()
-else:
-    pvo_key = str(sys.argv[1])
-    pvo_systemid = str(sys.argv[2])
 
 smlist = []
 for host in inverters.keys():
@@ -51,64 +46,64 @@ for host in inverters.keys():
     allinverters.extend(inverters[host])
 
 # cycle through the known inverters
-count = 0
+count = 1
 power_exp = [0] * (len(allinverters) + 1)
 temp = [0] * (len(allinverters) + 1)
 vdc = [0] * (len(allinverters) +1)
 energy_exp = [0] * (len(allinverters) +1)
 
+# Establish MySQL Connection
+try:
+  connection = MySQLdb.connect("localhost","DB-USER","DB-USER-PASSWORD","DB")
+except:
+  print "No Connection to MySQL Server. Check that MySQL is running and that the connection data are correct."
+
 for sm in smlist:
     for (no, ivdata) in sm.inverters().iteritems():
-        try:
+        #try:
             # Pass the parameters you wish to get from the inverter and log. Power, Voltage and Temp are all that's required for PVoutput.
-            (inverter, current) = sm.query(no, ['PAC', 'UL1', 'TKK', 'KDY'])
+            (inverter, current) = sm.query(no, ['PAC', 'KDY', 'KMT', 'KYR', 'KT0', 'TKK', 'UL1', 'IL1', 'UDC', 'IDC', 'SYS', 'SAL'])
 
-            # create connection to pvoutput.org
-            pvoutz = PVoutput_Connection(pvo_key, pvo_systemid)
 
             #use system date/Time for logging. Close enough
-            powerdate = time.strftime("%Y%m%d")
-            powerTime = time.strftime("%H:%M")
+            #powerdate = time.strftime("%Y%m%d")
+            powerdate = str(time.strftime("%d.%m.%Y"))
+            powerTime = str(time.strftime("%H:%M:%S"))
+	        datetime = str(time.strftime("%Y-%m-%d %H:%M:%S"))
+            #datetime = "2018-10-14 14:58:55"
             # parse the results of sm.query above
-            PowerGeneration = str(current['PAC'])
+            #PowerGeneration = str(current['PAC'])
+            PowerGeneration = "3010"
+            EnergyToday = str(current['KDY'])
+            EnergyMonth = str(current['KMT'])
+            EnergyYear = str(current['KYR'])
+            EnergyTotal = str(current['KT0'])
             Temperature = str(current['TKK'])
             Voltage = str(current['UL1'])
-            EnergyGeneration = str(current['KDY']*1000)
+            Current = str(current['IL1'])
+            #(Status, Errors) = sm.status(no, lang)
+            Status = "Netzbetrieb"
+            Errors = "None"
+	    number = str(no)
 
-            print "Date: " + str(powerdate) + " Time: " + str(
-                powerTime) + " W: " + PowerGeneration + " Temp: " + Temperature + " Volt: " + Voltage + " Energy: " + EnergyGeneration
+            print "Date: " + datetime + " W: " + PowerGeneration + " Energy_Today: " + EnergyToday + " Energy_Month: " + EnergyMonth + " Energy_Year: " + EnergyYear
+            print " Energy_Total: " + EnergyTotal + " Temp: " + Temperature + " Volt: " + Voltage + " Ampere: " + Current + " Status: " + Status + " Status_Error: " + Errors
 
-            # update pvoutput
-            if (PowerGeneration):  # make sure that we have actual values...
-                i = inverter
-                while inverter == i:
-                    power_exp[i] = float(PowerGeneration)
-                    temp[i] = float(Temperature)
-                    vdc[i] = float(Voltage)
-                    energy_exp[i] = float(EnergyGeneration)
-                    i = 0
-                                
-                print "Inverter " + str(inverter) + " successful Log"
+	    # Write Data to MySQL Database
+	    cursor = connection.cursor()
+	    query = """INSERT INTO imported (Datum,NrWR,PAC,Tagesertrag,Monatsertrag,Gesamtertrag,Temperatur,UDC1,IDC1,Status,Fehler) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, "Status", "Errors")"""
+	    values = (datetime,number,PowerGeneration,EnergyToday,EnergyMonth,EnergyYear,EnergyTotal,Temperature,Voltage,Current)
 
-                if (inverter == len(allinverters)):
-                    print "All inverters queried"
-                    print "Merging inverters data..."
-                    power_exp[0] = sum(power_exp[1:])
-                    temp[0] = (sum(temp[1:]) / len(allinverters))
-                    vdc[0] = (sum(vdc[1:]) / len(allinverters))
-                    energy_exp[0] = sum(energy_exp[1:])
-                    print "Inverters data merged!"
-                    print "Date: " + str(powerdate) + " Time: " + str(
-                        powerTime) + " W: " + str(power_exp[0]) + " temp: " + str(temp[0]) + " volt: " + str(vdc[0]) + " energy: " + str(energy_exp[0])
-                    pvoutz.add_status(powerdate, powerTime, energy_exp = energy_exp[0], power_exp = power_exp[0], temp=temp[0], vdc=vdc[0])
-                    print "Inverters data successful log"
-                #Ensure API limits adhered to
-                time.sleep(apiDelay)
-            else:
-                print "No data, wait for sunshine"
+	    
 
-            count += 1
-        except:
+	    #sql = "INSERT INTO imported (Datum,NrWR,PAC,Tagesertrag,Monatsertrag,Gesamtertrag,Temperatur,UDC1,IDC1,Status,Fehler) VALUES(datetime,no,PowerGeneration,EnergyToday,EnergyMonth,EnergyYear,EnergyTotal,Temperature,Voltage,Current,Status,Errors)"
+	    number_of_rows = cursor.execute(query, values)
+	    connection.commit() 
+	    cursor.close()
+
+	    print "SQL Insert: " + number_of_rows 
+            count = count + 1      
+        #except:
             print 'Communication Error, WR %i' % no
             continue
 #(status, errors) = sm.status(count)
@@ -120,8 +115,8 @@ for sm in smlist:
 #    except:
 #        pass
 
-if count < len(allinverters):
-    print 'Not all inverters queried (%i < %i)' % (count, len(allinverters))
+#if count <= len(allinverters):
+#    print 'Not all inverters queried (%i < %i)' % (count, len(allinverters))
 
-print "Data Succesfully query and posted."
+print "Data Succesfully query and inserted into database."
 time.sleep(1)
