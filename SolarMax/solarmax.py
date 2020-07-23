@@ -42,31 +42,31 @@ query_types = ['KDY', 'KYR', 'KMT', 'KT0', 'IL1', 'IDC', 'PAC', 'PRL',
 
 
 status_codes = {
-      20000: 'No Communication',
-      20001: 'In Use',
-      20002: 'Too little radiation',
-      20003: 'Approach', #? translation of Anfahren
-      20004: 'Operating at MPP',
-      20005: 'Fan Runs', #Ventilator läuft
-      20006: 'Operating at maximum power',
-      20007: 'Temperature Limit',
-      20008: 'Mains Operation',
+      20000: 'Keine Kommunikation',
+      20001: 'In Betrieb',
+      20002: 'Zu wenig Einstrahlung',
+      20003: 'Anfahren',
+      20004: 'Betrieb auf MPP',
+      20005: 'Ventilator läuft',
+      20006: 'Betrieb auf Maximalleistung',
+      20007: 'Temperaturbegrenzung',
+      20008: 'Netzbetrieb',
     }
 
 
 alarm_codes = {
-          0: 'No Error',
-          1: 'External Fault 1',
-          2: 'Insulation fault DC side',
-          4: 'Earth fault current too large',
-          8: 'Fuse failure midpoint Earth',
-         16: 'External alarm 2',
-         32: 'Long-term temperature limit',
-         64: 'Error AC supply ',
-        128: 'External alarm 4',
-        256: 'Fan failure',
-        512: 'Fuse failure ',
-       1024: 'Failure temperature sensor',
+          0: 'kein Fehler',
+          1: 'Externer Fehler 1',
+          2: 'Isolationsfehler DC-Seite',
+          4: 'Fehlerstrom Erde zu Groß',
+          8: 'Sicherungsbruch Mittelpunkterde',
+         16: 'Externer Alarm 2',
+         32: 'Langzeit-Temperaturbegrenzung',
+         64: 'Fehler AC-Einspeisung',
+        128: 'Externer Alarm 4',
+        256: 'Ventilator defekt',
+        512: 'Sicherungsbruch',
+       1024: 'Ausfall Temperatursensor',
        2048: 'Alarm 12',
        4096: 'Alarm 13',
        8192: 'Alarm 14',
@@ -309,14 +309,11 @@ class SolarMax ( object ):
     if not result:
       return ('Offline', 'Offline')
     result = result[1]
-    errors = []
-    if result['SAL'] > 0:
-      for (code, descr) in alarm_codes.items():
-        if code & result['SAL']:
-          errors.append(descr)
 
     status = status_codes[result['SYS'][0]]
-    return (status, ', '.join(errors))
+    errors = alarm_codes[result['SAL']]
+
+    return (status, errors)
 
 
   def use_inverters(self, list_of):
