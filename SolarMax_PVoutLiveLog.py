@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -* coding: utf-8 *-
 
 # This program is free software: you can redistribute it and/or modify
@@ -19,6 +19,8 @@
 
 # Combined 2014 Matt Cordell <Solar@snoyowie.com>
 
+# Reworked for MySQL Usage 2020 Dennis W. daylicron <https://github.com/daylicron>
+
 import time
 import sys
 from SolarMax.solarmax import SolarMax  # API for talking to the SolarMax inverter
@@ -27,10 +29,9 @@ import MySQLdb
 
 # Array of inverters in system. IP address and device number
 # factory default is likely 192.168.1.123:12345 1
-inverters = {'INVETER-IP': [1,2,3 ]}
-
-# Set Language for Status Output
-lang = "de"
+inverters = {'192.168.1.123': [1,]}
+# If you have 3 inverters it works like this
+# inverters = {'192.168.1.123': [1,2,3]}
 
 # get pvoutput API details
 apiDelay = 5  # time to delay after API calls
@@ -54,69 +55,50 @@ energy_exp = [0] * (len(allinverters) +1)
 
 # Establish MySQL Connection
 try:
-  connection = MySQLdb.connect("localhost","DB-USER","DB-USER-PASSWORD","DB")
+  connection = MySQLdb.connect("localhost","db_user","db_password","db")
 except:
-  print "No Connection to MySQL Server. Check that MySQL is running and that the connection data are correct."
+  print("No Connection to MySQL Server. Check that MySQL is running and that the connection data are correct.")
 
 for sm in smlist:
-    for (no, ivdata) in sm.inverters().iteritems():
-        #try:
-            # Pass the parameters you wish to get from the inverter and log. Power, Voltage and Temp are all that's required for PVoutput.
-            (inverter, current) = sm.query(no, ['PAC', 'KDY', 'KMT', 'KYR', 'KT0', 'TKK', 'UL1', 'IL1', 'UDC', 'IDC', 'SYS', 'SAL'])
+    for (no, ivdata) in sm.inverters().items():
+        try:
+          # Pass the parameters you wish to get from the inverter and log. Power, Voltage and Temp are all that's required for PVoutput.
+          (inverter, current) = sm.query(no, ['PAC', 'KDY', 'KMT', 'KYR', 'KT0', 'TKK', 'UL1', 'IL1', 'UDC', 'IDC', 'SYS', 'SAL'])
+          #use system date/Time for logging. Close enough
+          #powerdate = time.strftime("%Y%m%d")
+          powerdate = str(time.strftime("%d.%m.%Y"))
+          powerTime = str(time.strftime("%H:%M:%S"))
+          datetime = str(time.strftime("%Y-%m-%d %H:%M:%S"))
 
+          # parse the results of sm.query above
+          PowerGeneration = str(current['PAC'])
+          EnergyToday = str(current['KDY'])
+          EnergyMonth = str(current['KMT'])
+          EnergyYear = str(current['KYR'])
+          EnergyTotal = str(current['KT0'])
+          Temperature = str(current['TKK'])
+          Voltage = str(current['UL1'])
+          Current = str(current['IL1'])
 
-            #use system date/Time for logging. Close enough
-            #powerdate = time.strftime("%Y%m%d")
-            powerdate = str(time.strftime("%d.%m.%Y"))
-            powerTime = str(time.strftime("%H:%M:%S"))
-	        datetime = str(time.strftime("%Y-%m-%d %H:%M:%S"))
-            #datetime = "2018-10-14 14:58:55"
-            # parse the results of sm.query above
-            #PowerGeneration = str(current['PAC'])
-            PowerGeneration = "3010"
-            EnergyToday = str(current['KDY'])
-            EnergyMonth = str(current['KMT'])
-            EnergyYear = str(current['KYR'])
-            EnergyTotal = str(current['KT0'])
-            Temperature = str(current['TKK'])
-            Voltage = str(current['UL1'])
-            Current = str(current['IL1'])
-            #(Status, Errors) = sm.status(no, lang)
-            Status = "Netzbetrieb"
-            Errors = "None"
-	    number = str(no)
+          (status, errors) = sm.status(count)
+          number = str(no)
 
-            print "Date: " + datetime + " W: " + PowerGeneration + " Energy_Today: " + EnergyToday + " Energy_Month: " + EnergyMonth + " Energy_Year: " + EnergyYear
-            print " Energy_Total: " + EnergyTotal + " Temp: " + Temperature + " Volt: " + Voltage + " Ampere: " + Current + " Status: " + Status + " Status_Error: " + Errors
+          # Write Data to MySQL Database
+          cursor = connection.cursor()
+          query = """INSERT INTO <table_name> (datum,nrwr,pac,tagesertrag,monatsertrag,jahresertrag,gesamtertrag,temperatur,udc1,idc1,status,fehler) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+          values = (datetime,number,PowerGeneration,EnergyToday,EnergyMonth,EnergyYear,EnergyTotal,Temperature,Voltage,Current,status,errors)
 
-	    # Write Data to MySQL Database
-	    cursor = connection.cursor()
-	    query = """INSERT INTO imported (Datum,NrWR,PAC,Tagesertrag,Monatsertrag,Gesamtertrag,Temperatur,UDC1,IDC1,Status,Fehler) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, "Status", "Errors")"""
-	    values = (datetime,number,PowerGeneration,EnergyToday,EnergyMonth,EnergyYear,EnergyTotal,Temperature,Voltage,Current)
+          cursor.execute(query,values)
+          connection.commit() 
+          cursor.close()
 
-	    
+          count = count + 1      
+        except:
+          print('Communication Error, WR %i' % no)
+          continue
 
-	    #sql = "INSERT INTO imported (Datum,NrWR,PAC,Tagesertrag,Monatsertrag,Gesamtertrag,Temperatur,UDC1,IDC1,Status,Fehler) VALUES(datetime,no,PowerGeneration,EnergyToday,EnergyMonth,EnergyYear,EnergyTotal,Temperature,Voltage,Current,Status,Errors)"
-	    number_of_rows = cursor.execute(query, values)
-	    connection.commit() 
-	    cursor.close()
+if count <= len(allinverters):
+  print('Not all inverters queried (%i < %i)' % (count, len(allinverters)))
 
-	    print "SQL Insert: " + number_of_rows 
-            count = count + 1      
-        #except:
-            print 'Communication Error, WR %i' % no
-            continue
-#(status, errors) = sm.status(count)
-
-#if errors:
-#    print('WR %i: %s (%s)' % (no, status, errors))
-#    try:
-#        print("details: ", int(PAC), int(TEMP), int(VOLTAGE))
-#    except:
-#        pass
-
-#if count <= len(allinverters):
-#    print 'Not all inverters queried (%i < %i)' % (count, len(allinverters))
-
-print "Data Succesfully query and inserted into database."
+print("Data succesfully queried and inserted into database.")
 time.sleep(1)
